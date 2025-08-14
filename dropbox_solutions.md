@@ -229,3 +229,273 @@ Service        ↓
    - JWT tokens for authentication
 
 ---
+
+## Problem 2: Database System with Low Latency {#problem-2}
+
+### Problem Statement
+Design a database system that stores information in memory and processes data with minimal latency. The system should provide high availability, consistency, and handle high-throughput operations with sub-millisecond response times.
+
+### Functional Requirements
+1. **Data Operations**
+   - CRUD operations (Create, Read, Update, Delete)
+   - Complex queries with joins and aggregations
+   - Atomic transactions with ACID properties
+   - Batch operations for bulk data processing
+
+2. **Query Capabilities**
+   - SQL-like query language support
+   - Index-based fast lookups
+   - Range queries and filtering
+   - Real-time analytics queries
+
+3. **Data Management**
+   - Schema evolution and migration
+   - Data validation and constraints
+   - Backup and restore functionality
+   - Data compression for memory efficiency
+
+4. **Monitoring & Analytics**
+   - Query performance metrics
+   - Memory usage tracking
+   - Real-time system health monitoring
+   - Query plan optimization
+
+### Non-Functional Requirements
+1. **Performance**
+   - Read latency: < 1ms (p99)
+   - Write latency: < 5ms (p99)
+   - Throughput: 1M+ operations per second
+   - Query response time: < 10ms for complex queries
+
+2. **Availability**
+   - 99.99% uptime (< 1 hour downtime per year)
+   - Zero-downtime deployments
+   - Automatic failover within 30 seconds
+   - Cross-region disaster recovery
+
+3. **Scalability**
+   - Handle 10TB+ of in-memory data
+   - Support 10,000+ concurrent connections
+   - Horizontal scaling capabilities
+   - Dynamic resource allocation
+
+4. **Consistency**
+   - Strong consistency for critical operations
+   - Configurable consistency levels
+   - Multi-version concurrency control (MVCC)
+   - Deadlock detection and resolution
+
+5. **Durability**
+   - Persistent storage for crash recovery
+   - Write-ahead logging (WAL)
+   - Point-in-time recovery
+   - Data replication across nodes
+
+### Data Model (UML)
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│    Database     │    │      Table      │    │     Column      │
+├─────────────────┤    ├─────────────────┤    ├─────────────────┤
+│ db_id (PK)      │    │ table_id (PK)   │    │ column_id (PK)  │
+│ name            │◄───┤ db_id (FK)      │◄───┤ table_id (FK)   │
+│ charset         │    │ name            │    │ name            │
+│ created_at      │    │ schema_version  │    │ data_type       │
+│ size_bytes      │    │ row_count       │    │ is_nullable     │
+│ status          │    │ created_at      │    │ default_value   │
+└─────────────────┘    │ last_updated    │    │ constraints     │
+                       └─────────────────┘    └─────────────────┘
+                                │
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│      Index      │    │       Row       │    │   Transaction   │
+├─────────────────┤    ├─────────────────┤    ├─────────────────┤
+│ index_id (PK)   │    │ row_id (PK)     │    │ txn_id (PK)     │
+│ table_id (FK)   │◄───┤ table_id (FK)   │    │ session_id      │
+│ name            │    │ version         │    │ start_time      │
+│ type            │    │ data_blob       │    │ end_time        │
+│ columns         │    │ created_at      │    │ status          │
+│ is_unique       │    │ updated_at      │    │ isolation_level │
+│ statistics      │    │ txn_id (FK)     │◄───┤ operations      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   MemoryPool    │    │   QueryPlan     │    │    Session      │
+├─────────────────┤    ├─────────────────┤    ├─────────────────┤
+│ pool_id (PK)    │    │ plan_id (PK)    │    │ session_id (PK) │
+│ node_id         │    │ query_hash      │    │ user_id         │
+│ total_memory    │    │ execution_plan  │    │ connection_time │
+│ used_memory     │    │ estimated_cost  │    │ last_activity   │
+│ free_memory     │    │ actual_cost     │    │ active_txns     │
+│ fragmentation   │    │ cache_hits      │    │ query_count     │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+### Component Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                 Client Tier                                     │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ │
+│ │    SQL      │ │    REST     │ │   GraphQL   │ │   gRPC      │ │   Native    │ │
+│ │   Client    │ │   Client    │ │   Client    │ │   Client    │ │    SDK      │ │
+│ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                        │
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           Connection Load Balancer                              │
+│                        (HAProxy/NGINX with Health Checks)                       │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                        │
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                               Query Gateway                                     │
+│              (Authentication, Rate Limiting, Query Routing)                     │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                        │
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              Application Tier                                   │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ │
+│ │   Query     │ │   Query     │ │ Transaction │ │    Lock     │ │   Schema    │ │
+│ │   Parser    │ │  Optimizer  │ │   Manager   │ │   Manager   │ │   Manager   │ │
+│ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ │
+│                                        │                                        │
+│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ │
+│ │  Execution  │ │    Index    │ │   Memory    │ │    WAL      │ │ Replication │ │
+│ │   Engine    │ │   Manager   │ │   Manager   │ │   Manager   │ │   Manager   │ │
+│ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                        │
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              In-Memory Storage                                  │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ ┌─────────────────────────────────────────────────────────────────────────────┐ │
+│ │                              Memory Pools                                   │ │
+│ │ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐          │ │
+│ │ │   Node 1    │ │   Node 2    │ │   Node 3    │ │   Node N    │          │ │
+│ │ │  (Primary)  │ │ (Secondary) │ │ (Secondary) │ │ (Secondary) │          │ │
+│ │ │             │ │             │ │             │ │             │          │ │
+│ │ │ ┌─────────┐ │ │ ┌─────────┐ │ │ ┌─────────┐ │ │ ┌─────────┐ │          │ │
+│ │ │ │  Data   │ │ │ │  Data   │ │ │ │  Data   │ │ │ │  Data   │ │          │ │
+│ │ │ │  Pool   │ │ │ │  Pool   │ │ │ │  Pool   │ │ │ │  Pool   │ │          │ │
+│ │ │ └─────────┘ │ │ └─────────┘ │ │ └─────────┘ │ │ └─────────┘ │          │ │
+│ │ │ ┌─────────┐ │ │ ┌─────────┐ │ │ ┌─────────┐ │ │ ┌─────────┐ │          │ │
+│ │ │ │ Index   │ │ │ │ Index   │ │ │ │ Index   │ │ │ │ Index   │ │          │ │
+│ │ │ │  Pool   │ │ │ │  Pool   │ │ │ │  Pool   │ │ │ │  Pool   │ │          │ │
+│ │ │ └─────────┘ │ │ └─────────┘ │ │ └─────────┘ │ │ └─────────┘ │          │ │
+│ │ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘          │ │
+│ └─────────────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                        │
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                             Persistent Storage                                  │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ │
+│ │     WAL     │ │  Checkpoint │ │   Backup    │ │    Logs     │ │  Metadata   │ │
+│ │   Storage   │ │   Storage   │ │   Storage   │ │   Storage   │ │   Storage   │ │
+│ │    (SSD)    │ │    (SSD)    │ │    (S3)     │ │   (SSD)     │ │    (SSD)    │ │
+│ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Flows
+
+#### 1. Read Query Execution Flow
+```
+Client → Query Gateway → Query Parser → Query Optimizer → Execution Engine
+   ↓              ↓             ↓             ↓               ↓
+Session ← Connection Pool ← Query Plan Cache ← Index Manager ← Memory Pool
+Manager                                          ↓               ↓
+   ↓                                        Result Set ← Data Retrieval
+Result → Client
+```
+
+#### 2. Write Transaction Flow
+```
+Client → Transaction Manager → Lock Manager → WAL Manager → Memory Manager
+   ↓            ↓                  ↓             ↓             ↓
+Isolation ← Lock Acquisition ← Write Lock ← WAL Entry ← In-Memory Update
+Level                              ↓             ↓             ↓
+   ↓                          Commit/Rollback ← Persistence ← Index Update
+Transaction Complete ← Unlock Resources ← WAL Sync ← Memory Commit
+```
+
+#### 3. Replication Flow
+```
+Primary Node (Write) → WAL Entry → Replication Manager → Secondary Nodes
+        ↓                  ↓             ↓                    ↓
+   Memory Update ← WAL Sync ← Async Replication ← Memory Application
+        ↓                                                    ↓
+   Commit Response                                    Replication ACK
+```
+
+### Key Technical Decisions
+
+1. **Memory Management Strategy**
+   - **NUMA-Aware Allocation**: Optimize for CPU cache locality
+   - **Memory Pools**: Pre-allocated pools for different data types
+   - **Garbage Collection**: Custom GC optimized for database workloads
+   - **Memory Mapping**: Use mmap for large datasets
+
+2. **Indexing Strategy**
+   - **B+ Trees**: Primary indexes for range queries
+   - **Hash Indexes**: Secondary indexes for exact matches
+   - **Bitmap Indexes**: For low-cardinality columns
+   - **LSM Trees**: For write-heavy workloads
+
+3. **Concurrency Control**
+   - **MVCC**: Multi-version concurrency control
+   - **Optimistic Locking**: For read-heavy workloads
+   - **Lock-Free Data Structures**: For critical paths
+   - **Fine-Grained Locking**: Row-level and page-level locks
+
+4. **Storage Engine Design**
+   - **Columnar Storage**: For analytical queries
+   - **Row Storage**: For transactional queries
+   - **Compression**: Dictionary encoding and delta compression
+   - **Partitioning**: Horizontal and vertical partitioning
+
+### Performance Optimizations
+
+1. **Query Optimization**
+   - **Cost-Based Optimizer**: Statistics-driven query planning
+   - **Plan Caching**: Cache execution plans for repeated queries
+   - **Adaptive Optimization**: Runtime plan adjustment
+   - **Parallel Execution**: Multi-threaded query processing
+
+2. **Memory Optimization**
+   - **Data Compression**: In-memory compression techniques
+   - **Prefetching**: Predictive data loading
+   - **Cache Management**: LRU with frequency-based eviction
+   - **Memory Defragmentation**: Background compaction
+
+3. **Network Optimization**
+   - **Connection Pooling**: Reuse database connections
+   - **Result Set Streaming**: Avoid large result buffering
+   - **Binary Protocols**: Efficient data serialization
+   - **Compression**: Network-level compression
+
+### Monitoring & Observability
+
+```python
+class DatabaseMetrics:
+    def __init__(self):
+        self.metrics = {
+            'query_latency_p99': HistogramMetric(),
+            'memory_usage': GaugeMetric(),
+            'transaction_throughput': CounterMetric(),
+            'cache_hit_ratio': GaugeMetric(),
+            'connection_count': GaugeMetric(),
+            'replication_lag': GaugeMetric()
+        }
+    
+    def track_query_execution(self, query_time, query_type):
+        self.metrics['query_latency_p99'].observe(query_time)
+        
+    def monitor_memory_usage(self):
+        total_memory = self.get_total_memory()
+        used_memory = self.get_used_memory()
+        self.metrics['memory_usage'].set(used_memory / total_memory * 100)
+```
+
+---
